@@ -26,6 +26,26 @@ from typing import Optional
 
 import pymupdf  # pip install pymupdf
 
+import pymupdf, re
+
+TELEFON = re.compile(
+    r"(?:Tel\.?|Fax\.?|Mobil\.?|Phone[\s:]*)?(?:\+49|0049|0)[\s\-]?(\d{2,5})[\s\-\/]?(\d{3,}[\s\-]?\d*)",
+    re.IGNORECASE,
+)
+
+doc = pymupdf.open("test2.pdf")
+page = doc[0]
+text_page = page.get_textpage()
+blocks = text_page.extractDICT()["blocks"]
+page_text = ""
+for block in blocks:
+    if block.get("type") == 0:
+        for line in block.get("lines", []):
+            page_text += "".join(s.get("text", "") for s in line.get("spans", [])) + "\n"
+
+for m in TELEFON.finditer(page_text):
+    print(repr(m.group(0)))
+
 
 # ---------------------------------------------------------------------------
 # PII-Pattern (Deutschland-fokussiert, Immobiliendokumente)
@@ -174,6 +194,22 @@ def redact_pdf(
     result = RedactionResult(str(input_path), str(output_path))
 
     doc = pymupdf.open(str(input_path))
+
+    for page_num, page in enumerate(doc):
+        text_page = page.get_textpage()
+        blocks = text_page.extractDICT()["blocks"]
+        page_text = ""
+        for block in blocks:
+            if block.get("type") == 0:
+                for line in block.get("lines", []):
+                    line_text = "".join(s.get("text", "") for s in line.get("spans", []))
+                    page_text += line_text + "\n"
+        
+        print(f"=== Seite {page_num+1} ===")
+        for i, line in enumerate(page_text.split("\n")[:60]):  # erste 60 Zeilen
+            print(f"{i:>3}: {repr(line)}")
+        print("...")
+        break  # erstmal nur Seite 1
 
     for page_num, page in enumerate(doc):
         # Textlayer ermitteln — bei Bedarf via OCR
